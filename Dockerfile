@@ -1,5 +1,5 @@
 FROM azul/zulu-openjdk-centos:latest
-MAINTAINER Totto <bard.lind@gmail.com>
+MAINTAINER Bard Lind <bard.lind@gmail.com>
 RUN yum install -y yum-cron
 RUN yum -y update
  
