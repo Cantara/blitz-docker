@@ -1,5 +1,5 @@
 FROM azul/zulu-openjdk-centos:latest
-MAINTAINER Bard Lind <bard.lind@gmail.com>
+MAINTAINER Bard Lind <bard.lind@gmail.com> 
 RUN yum install -y yum-cron
 RUN yum -y update
  
@@ -26,7 +26,13 @@ RUN su -  blitz  -c "unzip apache-river-2.2.2-bin.zip"
 RUN su -  blitz -c "/usr/bin/wget -O installer_pj_2_1_7.jar -q -N  https://github.com/downloads/dancres/blitzjavaspaces/installer_pj_2_1_7.jar"
 RUN su -  blitz  -c "java -Dblitz.nocheck=true -jar installer_pj_2_1_7.jar /home/blitz/apache-river-2.2.2 /home/blitz/blitz 8085 "
 RUN su -  blitz -c "chmod +x ./blitz/*.sh"
-#RUN su -  blitz -c "cd blitz; ./blitz.sh"
- 
+
+## Set up start of services
+RUN yum -y install python-setuptools
+RUN easy_install supervisor
+RUN mkdir -p /var/log/supervisor
+ADD supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+RUN ln -s /etc/supervisor/conf.d/supervisord.conf /etc/supervisord.conf
  
 EXPOSE 22 8085 4160
+CMD ["/usr/bin/supervisord"]
