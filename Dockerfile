@@ -25,8 +25,8 @@ RUN su -  blitz  -c "unzip apache-river-2.2.2-bin.zip"
 ## Install Blitz
 RUN su -  blitz -c "/usr/bin/wget -O installer_pj_2_1_7.jar -q -N  https://github.com/downloads/dancres/blitzjavaspaces/installer_pj_2_1_7.jar"
 RUN su -  blitz  -c "java -Dblitz.nocheck=true -jar installer_pj_2_1_7.jar /home/blitz/apache-river-2.2.2 /home/blitz/blitz 8085 "
-RUN su -  blitz -c "chmod + ./blitz/*.sh"
-# RUN su -  blitz -c "cd blitz; ./blitz.sh"
+RUN su -  blitz -c "chmod +x ./blitz/*.sh"
+#RUN su -  blitz -c "cd blitz; ./blitz.sh"
  
  
-EXPOSE 22
+EXPOSE 22 8085 4160
