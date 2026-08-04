@@ -1,38 +1,56 @@
-FROM azul/zulu-openjdk-centos:latest
-MAINTAINER Bard Lind <bard.lind@gmail.com> 
-RUN yum install -y yum-cron
-RUN yum -y update
- 
-RUN yum install -y wget 
-RUN yum install -y unzip
-# Install sshd - should probably be fortified
-RUN yum install -y openssh-server
-RUN mkdir /var/run/sshd
-RUN echo 'root:kjempehemmelig' | chpasswd
-RUN sed -i 's/PermitRootLogin without-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
-RUN echo "export VISIBLE=now" >> /etc/profile
-RUN /usr/sbin/sshd-keygen
- 
-RUN adduser  blitz
- 
- 
-## Install Apache River
-RUN su -  blitz -c "/usr/bin/wget -O apache-river-2.2.2-bin.zip -q -N  http://www.trieuvan.com/apache/river/river-2.2.2/apache-river-2.2.2-bin.zip"
-RUN su -  blitz  -c "unzip apache-river-2.2.2-bin.zip"
- 
- 
-## Install Blitz
-RUN su -  blitz -c "/usr/bin/wget -O installer_pj_2_1_7.jar -q -N  https://github.com/downloads/dancres/blitzjavaspaces/installer_pj_2_1_7.jar"
-RUN su -  blitz  -c "java -Dblitz.nocheck=true -jar installer_pj_2_1_7.jar /home/blitz/apache-river-2.2.2 /home/blitz/blitz 8085 "
-RUN su -  blitz -c "chmod +x ./blitz/*.sh"
+# Blitz JavaSpaces + Apache River on Java 21 (LTS).
+#
+# Java 21 is deliberate: Jini/River installs a SecurityManager at startup, and
+# the SecurityManager was removed in JDK 24 (JEP 486). Java 21 is the newest
+# LTS that can still run Blitz/River, with -Djava.security.manager=allow.
 
-## Set up start of services
-RUN yum -y install python-setuptools
-RUN easy_install supervisor
-RUN mkdir -p /var/log/supervisor
-ADD supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-RUN ln -s /etc/supervisor/conf.d/supervisord.conf /etc/supervisord.conf
- 
-EXPOSE 22 8085 4160
-CMD ["/usr/bin/supervisord"]
+ARG RIVER_VERSION=2.2.2
+ARG BLITZ_INSTALLER_URL=https://github.com/downloads/dancres/blitzjavaspaces/installer_pj_2_1_7.jar
+
+## Stage 1: download River and run the Blitz installer
+FROM azul/zulu-openjdk:21 AS installer
+ARG RIVER_VERSION
+ARG BLITZ_INSTALLER_URL
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends wget unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home blitz
+USER blitz
+WORKDIR /home/blitz
+
+## Install Apache River
+RUN wget -q -O apache-river-${RIVER_VERSION}-bin.zip \
+        "https://archive.apache.org/dist/river/river-${RIVER_VERSION}/apache-river-${RIVER_VERSION}-bin.zip" \
+    && unzip -q apache-river-${RIVER_VERSION}-bin.zip \
+    && rm apache-river-${RIVER_VERSION}-bin.zip
+
+## Install Blitz
+RUN wget -q -O blitz-installer.jar "${BLITZ_INSTALLER_URL}" \
+    && java -Dblitz.nocheck=true -jar blitz-installer.jar \
+        /home/blitz/apache-river-${RIVER_VERSION} /home/blitz/blitz 8085 \
+    && chmod +x /home/blitz/blitz/*.sh \
+    && rm blitz-installer.jar
+
+## Stage 2: runtime image
+FROM azul/zulu-openjdk:21-jre
+
+LABEL org.opencontainers.image.title="blitz-docker" \
+      org.opencontainers.image.description="Docker image running Blitz JavaSpaces and Apache River" \
+      org.opencontainers.image.source="https://github.com/Cantara/blitz-docker" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
+RUN useradd --create-home blitz
+
+COPY --from=installer --chown=blitz:blitz /home/blitz /home/blitz
+
+# River/Blitz install a SecurityManager; JDK 18+ requires opting in at launch.
+ENV JAVA_TOOL_OPTIONS="-Djava.security.manager=allow"
+
+USER blitz
+WORKDIR /home/blitz/blitz
+
+EXPOSE 8085 4160
+
+CMD ["/bin/bash", "/home/blitz/blitz/blitz.sh"]
